@@ -9,9 +9,9 @@ import json
 TOKEN = "8624371307:AAFo2rHtkMngWtBz-gCxVBB-_gZW23voPhw"
 bot = telebot.TeleBot(TOKEN)
 
-# 🛠 ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ (Путь изменен на /data/pizza_bot.db для Render)
+# 🛠 ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ (Путь изменен обратно на локальный для бесплатного тарифа)
 def init_db():
-    conn = sqlite3.connect("/data/pizza_bot.db")
+    conn = sqlite3.connect("pizza_bot.db")
     cursor = conn.cursor()
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS bills (
@@ -25,7 +25,7 @@ def init_db():
     conn.close()
 
 def save_bill(bill_id, total_cost, creator_id, participants):
-    conn = sqlite3.connect("/data/pizza_bot.db")
+    conn = sqlite3.connect("pizza_bot.db")
     cursor = conn.cursor()
     parts_json = json.dumps(participants)
     cursor.execute(
@@ -36,7 +36,7 @@ def save_bill(bill_id, total_cost, creator_id, participants):
     conn.close()
 
 def load_all_bills():
-    conn = sqlite3.connect("/data/pizza_bot.db")
+    conn = sqlite3.connect("pizza_bot.db")
     cursor = conn.cursor()
     cursor.execute("SELECT bill_id, total_cost, creator_id, participants FROM bills")
     rows = cursor.fetchall()
@@ -45,11 +45,11 @@ def load_all_bills():
     bills_dict = {}
     for row in rows:
         try:
-            loaded_parts = json.loads(row[3])
+            loaded_parts = json.loads(row)
             fixed_parts = {int(k): v for k, v in loaded_parts.items()}
-            bills_dict[row[0]] = {
-                "total_cost": row[1],
-                "creator_id": row[2],
+            bills_dict[row] = {
+                "total_cost": row,
+                "creator_id": row,
                 "participants": fixed_parts
             }
         except Exception:
@@ -128,7 +128,7 @@ def get_bill_status_text(bill_id):
 def start_cmd(message):
     args = message.text.split()
     if len(args) > 1:
-        potential_id = args[1]
+        potential_id = args
         if potential_id.isdigit():
             bill_id = int(potential_id)
             if bill_id in bills:
