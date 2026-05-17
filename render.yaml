@@ -1,0 +1,10 @@
+services:
+  - type: worker
+    name: pizza-ai-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    disk:
+      name: pizza-db
+      mountPath: /data
+      size: 1Gi
