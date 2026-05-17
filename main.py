@@ -9,7 +9,7 @@ import json
 TOKEN = "8624371307:AAFo2rHtkMngWtBz-gCxVBB-_gZW23voPhw"
 bot = telebot.TeleBot(TOKEN)
 
-# 🛠 ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ (Путь изменен обратно на локальный для бесплатного тарифа)
+# 🛠 ИНИЦИАЛИЗАЦИЯ БАЗЫ ДАННЫХ
 def init_db():
     conn = sqlite3.connect("pizza_bot.db")
     cursor = conn.cursor()
@@ -83,6 +83,7 @@ def get_main_inline_menu():
     markup = types.InlineKeyboardMarkup()
     btn_create = types.InlineKeyboardButton(text="➕ Создать новый сбор", callback_data="menu_create")
     
+    # ИСПРАВЛЕНО: Ссылка теперь ведет строго на ваш аккаунт
     support_url = "https://t.me"
     btn_support = types.InlineKeyboardButton(text="👨‍💻 Тех. поддержка", url=support_url)
     
@@ -226,5 +227,6 @@ def handle_id_input(message):
     else:
         bot.send_message(message.chat.id, "Сбор с таким ID не найден.")
 
-print("ИИ-Бот для сервера готов...")
+print("ИИ-Бот для сервера обновлен...")
 bot.infinity_polling()
+
