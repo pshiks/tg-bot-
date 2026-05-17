@@ -7,4 +7,4 @@ services:
     disk:
       name: pizza-db
       mountPath: /data
-      size: 1Gi
+      
