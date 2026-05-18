@@ -34,9 +34,10 @@ def start(message):
     db["user_states"][str(message.chat.id)] = "MAIN_MENU"
     save_db(db)
     
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    btn_create = types.KeyboardButton("➕ Создать новый сбор")
-    btn_support = types.KeyboardButton("🧑‍💻 Тех. поддержка")
+    # ИЗМЕНЕНО: Кнопки теперь создаются внутри сообщения (Inline)
+    markup = types.InlineKeyboardMarkup(row_width=1)
+    btn_create = types.InlineKeyboardButton("➕ Создать новый сбор", callback_data="btn_ask_total")
+    btn_support = types.InlineKeyboardButton("🧑‍💻 Тех. поддержка", callback_data="btn_get_support")
     markup.add(btn_create, btn_support)
     
     welcome_text = (
@@ -47,12 +48,12 @@ def start(message):
     )
     bot.send_message(message.chat.id, welcome_text, reply_markup=markup)
 
-@bot.message_handler(func=lambda message: message.text == "➕ Создать новый сбор")
-def ask_total_amount(message):
+# ИЗМЕНЕНО: Функция вызова ввода суммы перенесена в callback от инлайн-кнопки
+def start_asking_amount(chat_id):
     db = load_db()
-    db["user_states"][str(message.chat.id)] = "WAITING_FOR_TOTAL"
+    db["user_states"][str(chat_id)] = "WAITING_FOR_TOTAL"
     save_db(db)
-    bot.send_message(message.chat.id, "Введите общую сумму сбора (например, 1500):")
+    bot.send_message(chat_id, "Введите общую сумму сбора (например, 1500):")
 
 @bot.message_handler(func=lambda message: load_db()["user_states"].get(str(message.chat.id)) == "WAITING_FOR_TOTAL")
 def process_total_amount(message):
@@ -120,7 +121,17 @@ def handle_callbacks(call):
     data = call.data
     chat_id = call.message.chat.id
     
-    if data.startswith("join_"):
+    # Обработка главных инлайн-кнопок меню
+    if data == "btn_ask_total":
+        bot.answer_callback_query(call.id)
+        start_asking_amount(chat_id)
+        
+    elif data == "btn_get_support":
+        bot.answer_callback_query(call.id)
+        bot.send_message(chat_id, "По всем вопросам и предложениям пишите разработчику: @pshiks")
+
+    # Обработка карточки сбора
+    elif data.startswith("join_"):
         pool_id = data.split("_")[1]
         pool = db["pools"].get(pool_id)
         if pool:
@@ -168,10 +179,6 @@ def handle_callbacks(call):
     elif data == "home":
         bot.answer_callback_query(call.id)
         start(call.message)
-
-@bot.message_handler(func=lambda message: message.text == "🧑‍💻 Тех. поддержка")
-def support(message):
-    bot.send_message(message.chat.id, "По всем вопросам и предложениям пишите разработчику: @pshiks")
 
 if __name__ == "__main__":
     from threading import Thread
