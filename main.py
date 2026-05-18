@@ -31,13 +31,77 @@ def save_db(db):
     with open(DB_FILE, 'w', encoding='utf-8') as f:
         json.dump(db, f, ensure_ascii=False, indent=4)
 
+def generate_invite_link(pool_id):
+    """Генерирует ссылку-приглашение для сбора"""
+    bot_username = bot.get_me().username
+    return f"https://t.me/{bot_username}?start=join_pool_{pool_id}"
+
+def join_pool_by_invite(message, pool_id):
+    """Обрабатывает присоединение к сбору по ссылке"""
+    db = load_db()
+    pool = db["pools"].get(str(pool_id))
+    
+    if not pool:
+        bot.send_message(message.chat.id, "❌ Такой сбор уже не существует или был удален!")
+        return
+    
+    # Проверяем, не участвует ли уже пользователь
+    if str(message.chat.id) in pool["participants"]:
+        bot.send_message(message.chat.id, f"✅ Вы уже участвуете в сборе №{pool_id}!")
+        send_pool_card(message.chat.id, pool_id)
+        return
+    
+    # Добавляем пользователя в сбор
+    username = message.from_user.username
+    mention = f"@{username}" if username else message.from_user.first_name
+    
+    pool["participants"][str(message.chat.id)] = {
+        "name": mention, 
+        "paid": 0, 
+        "status": "Не сдал"
+    }
+    save_db(db)
+    
+    # Отправляем подтверждение
+    bot.send_message(
+        message.chat.id, 
+        f"🎉 Вы успешно присоединились к сбору №{pool_id}!\n\n"
+        f"Создатель сбора: {pool['participants'][str(pool['creator'])]['name']}\n"
+        f"Общая сумма: {pool['total']} руб."
+    )
+    
+    # Показываем карточку сбора
+    send_pool_card(message.chat.id, pool_id)
+    
+    # Уведомляем создателя сбора
+    try:
+        bot.send_message(
+            pool["creator"],
+            f"👤 Новый участник присоединился к сбору №{pool_id}!\n"
+            f"Имя: {mention}\n"
+            f"Теперь в сборе {len(pool['participants'])} человек(а)"
+        )
+    except Exception:
+        pass
+
 @bot.message_handler(commands=['start'])
 def start(message):
+    # Проверяем, есть ли параметр (приглашение в сбор)
+    command_parts = message.text.split()
+    if len(command_parts) > 1:
+        param = command_parts[1]
+        if param.startswith("join_pool_"):
+            # Пользователь перешел по ссылке-приглашению
+            pool_id = param.replace("join_pool_", "")
+            join_pool_by_invite(message, pool_id)
+            return
+    
+    # Обычный запуск (без приглашения)
     db = load_db()
     db["user_states"][str(message.chat.id)] = "MAIN_MENU"
     save_db(db)
     
-    # Создаем инлайн-кнопки (внутри сообщения)
+    # Создаем инлайн-кнопки
     markup = types.InlineKeyboardMarkup(row_width=1)
     btn_create = types.InlineKeyboardButton("➕ Создать новый сбор", callback_data="btn_ask_total")
     btn_support = types.InlineKeyboardButton("🧑‍💻 Тех. поддержка", callback_data="btn_get_support")
@@ -50,14 +114,12 @@ def start(message):
         "Выберите действие ниже 👇"
     )
     
-    # Сначала отправляем команду на полное удаление нижней текстовой клавиатуры
+    # Удаляем старую клавиатуру
     remove_markup = types.ReplyKeyboardRemove()
     temp_msg = bot.send_message(message.chat.id, "Загрузка...", reply_markup=remove_markup)
-    
-    # Сразу же удаляем временное сообщение, чтобы интерфейс оставался чистым
     bot.delete_message(message.chat.id, temp_msg.message_id)
     
-    # Отправляем основное меню с кнопками под текстом
+    # Отправляем приветственное сообщение
     bot.send_message(message.chat.id, welcome_text, reply_markup=markup)
 
 # Функция запуска сбора
@@ -67,7 +129,7 @@ def start_asking_amount(chat_id):
     save_db(db)
     bot.send_message(chat_id, "Введите общую сумму сбора (например, 1500):")
 
-# Отлавливает случайный текст в главном меню, чтобы бот не молчал
+# Отлавливает случайный текст в главном меню
 @bot.message_handler(func=lambda message: load_db().get("user_states", {}).get(str(message.chat.id)) == "MAIN_MENU")
 def default_menu_handler(message):
     bot.send_message(
@@ -128,9 +190,11 @@ def send_pool_card(chat_id, pool_id):
     btn_join = types.InlineKeyboardButton("🤠 Я в деле!", callback_data=f"join_{pool_id}")
     btn_paid = types.InlineKeyboardButton("💰 Я скинул", callback_data=f"paid_{pool_id}")
     btn_remind = types.InlineKeyboardButton("🧠 ИИ-напоминание", callback_data=f"remind_{pool_id}")
+    btn_invite = types.InlineKeyboardButton("🔗 Пригласить друга", callback_data=f"invite_{pool_id}")
     btn_home = types.InlineKeyboardButton("⬅️ На главную", callback_data="home")
     
     markup.add(btn_join, btn_paid)
+    markup.add(btn_invite)
     markup.add(btn_remind)
     markup.add(btn_home)
     
@@ -149,9 +213,58 @@ def handle_callbacks(call):
     elif data == "btn_get_support":
         bot.answer_callback_query(call.id)
         bot.send_message(chat_id, "По всем вопросам и предложениям пишите разработчику: @eFpshik")
+    
+    elif data.startswith("invite_"):
+        pool_id = data.split("_")[1]
+        pool = db["pools"].get(pool_id)
+        
+        if pool:
+            invite_link = generate_invite_link(pool_id)
+            
+            # Создаем кнопки для ссылки
+            markup = types.InlineKeyboardMarkup(row_width=1)
+            btn_share = types.InlineKeyboardButton(
+                "📤 Поделиться ссылкой", 
+                url=f"https://t.me/share/url?url={invite_link}&text=Присоединяйся к совместному сбору денег!"
+            )
+            btn_copy = types.InlineKeyboardButton(
+                "📋 Скопировать ссылку", 
+                callback_data=f"copy_link_{pool_id}"
+            )
+            markup.add(btn_share, btn_copy)
+            
+            bot.send_message(
+                chat_id, 
+                f"🔗 **Ссылка для приглашения в сбор №{pool_id}:**\n\n"
+                f"`{invite_link}`\n\n"
+                f"📌 Отправьте эту ссылку другу — он сможет присоединиться к сбору, нажав «Start» или перейдя по ссылке!\n\n"
+                f"💡 *Совет:* Можно также нажать «Поделиться» и выбрать любой мессенджер.",
+                reply_markup=markup,
+                parse_mode="Markdown"
+            )
+            bot.answer_callback_query(call.id)
+        else:
+            bot.answer_callback_query(call.id, "Сбор не найден!")
+    
+    elif data.startswith("copy_link_"):
+        pool_id = data.split("_")[2]
+        invite_link = generate_invite_link(pool_id)
+        
+        # Пытаемся скопировать через всплывающее окно (только для Telegram Desktop)
+        bot.answer_callback_query(
+            call.id, 
+            f"Ссылка скопирована: {invite_link}", 
+            show_alert=False
+        )
+        
+        # Дополнительно отправляем ссылку отдельным сообщением для копирования
+        bot.send_message(
+            chat_id,
+            f"🔗 Ваша ссылка:\n`{invite_link}`\n\nНажмите на неё и выберите «Копировать»",
+            parse_mode="Markdown"
+        )
         
     elif data.startswith("join_"):
-        # ИСПРАВЛЕНО: берем второй элемент после split
         pool_id = data.split("_")[1]
         pool = db["pools"].get(pool_id)
         if pool:
@@ -168,7 +281,6 @@ def handle_callbacks(call):
             bot.answer_callback_query(call.id, "Сбор не найден!")
             
     elif data.startswith("paid_"):
-        # ИСПРАВЛЕНО: берем второй элемент после split
         pool_id = data.split("_")[1]
         pool = db["pools"].get(pool_id)
         if pool:
@@ -187,7 +299,6 @@ def handle_callbacks(call):
             bot.answer_callback_query(call.id, "Сбор не найден!")
                 
     elif data.startswith("remind_"):
-        # ИСПРАВЛЕНО: берем второй элемент после split
         pool_id = data.split("_")[1]
         pool = db["pools"].get(pool_id)
         if pool:
@@ -211,6 +322,7 @@ def handle_callbacks(call):
         class MockMessage:
             def __init__(self, chat_id):
                 self.chat = type('obj', (object,), {'id': chat_id})()
+                self.text = "/start"
         start(MockMessage(chat_id))
 
 if __name__ == "__main__":
@@ -235,4 +347,5 @@ if __name__ == "__main__":
     bot.remove_webhook()
     
     print("Бот запущен и готов к работе!")
+    print(f"Имя бота: @{bot.get_me().username}")
     bot.infinity_polling()
