@@ -227,9 +227,22 @@ def handle_id_input(message):
     else:
         bot.send_message(message.chat.id, "Сбор с таким ID не найден.")
 
-print("ИИ-Бот для сервера обновлен...")
-bot.infinity_polling()
 import os
-port = int(os.environ.get("PORT", 5000))
-app.run(host='0.0.0.0', port=port)
+import threading
+from http.server import SimpleHTTPRequestHandler, HTTPServer
+
+def run_dummy_server():
+    port = int(os.environ.get("PORT", 8000))
+    server = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
+    print(f"Фиктивный сервер запущен на порту {port}")
+    server.serve_forever()
+
+if __name__ == "__main__":
+    # Запускаем веб-сервер в отдельном потоке, чтобы порадовать Render
+    threading.Thread(target=run_dummy_server, daemon=True).start()
+    
+    # Запускаем бота
+    print("ИИ-Бот для сервера обновлен...")
+    bot.infinity_polling()
+
 
