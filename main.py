@@ -21,8 +21,11 @@ DB_FILE = 'database.json'
 def load_db():
     if not os.path.exists(DB_FILE):
         return {"pools": {}, "user_states": {}, "next_pool_id": 1}
-    with open(DB_FILE, 'r', encoding='utf-8') as f:
-        return json.load(f)
+    try:
+        with open(DB_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception:
+        return {"pools": {}, "user_states": {}, "next_pool_id": 1}
 
 def save_db(db):
     with open(DB_FILE, 'w', encoding='utf-8') as f:
@@ -34,7 +37,7 @@ def start(message):
     db["user_states"][str(message.chat.id)] = "MAIN_MENU"
     save_db(db)
     
-    # ИЗМЕНЕНО: Кнопки теперь создаются внутри сообщения (Inline)
+    # Кнопки прикрепляются к сообщению (Inline)
     markup = types.InlineKeyboardMarkup(row_width=1)
     btn_create = types.InlineKeyboardButton("➕ Создать новый сбор", callback_data="btn_ask_total")
     btn_support = types.InlineKeyboardButton("🧑‍💻 Тех. поддержка", callback_data="btn_get_support")
@@ -46,16 +49,29 @@ def start(message):
         "а ИИ проследит за должниками!\n\n"
         "Выберите действие ниже 👇"
     )
+    
+    # Сначала убираем забагованную нижнюю клавиатуру, если она осталась, и шлем меню
+    remove_markup = types.ReplyKeyboardRemove()
+    bot.send_message(message.chat.id, "Загружаю меню...", reply_markup=remove_markup)
     bot.send_message(message.chat.id, welcome_text, reply_markup=markup)
 
-# ИЗМЕНЕНО: Функция вызова ввода суммы перенесена в callback от инлайн-кнопки
+# Функция запуска сбора
 def start_asking_amount(chat_id):
     db = load_db()
     db["user_states"][str(chat_id)] = "WAITING_FOR_TOTAL"
     save_db(db)
     bot.send_message(chat_id, "Введите общую сумму сбора (например, 1500):")
 
-@bot.message_handler(func=lambda message: load_db()["user_states"].get(str(message.chat.id)) == "WAITING_FOR_TOTAL")
+# НОВЫЙ БЛОК: Отлавливает текст в главном меню, чтобы бот не молчал
+@bot.message_handler(func=lambda message: load_db().get("user_states", {}).get(str(message.chat.id)) == "MAIN_MENU")
+def default_menu_handler(message):
+    bot.send_message(
+        message.chat.id, 
+        "Пожалуйста, используйте синие инлайн-кнопки под сообщением выше 👆 для управления сборами."
+    )
+
+# Обработка ввода суммы
+@bot.message_handler(func=lambda message: load_db().get("user_states", {}).get(str(message.chat.id)) == "WAITING_FOR_TOTAL")
 def process_total_amount(message):
     try:
         total = float(message.text)
@@ -121,7 +137,6 @@ def handle_callbacks(call):
     data = call.data
     chat_id = call.message.chat.id
     
-    # Обработка главных инлайн-кнопок меню
     if data == "btn_ask_total":
         bot.answer_callback_query(call.id)
         start_asking_amount(chat_id)
@@ -130,7 +145,6 @@ def handle_callbacks(call):
         bot.answer_callback_query(call.id)
         bot.send_message(chat_id, "По всем вопросам и предложениям пишите разработчику: @pshiks")
 
-    # Обработка карточки сбора
     elif data.startswith("join_"):
         pool_id = data.split("_")[1]
         pool = db["pools"].get(pool_id)
@@ -180,6 +194,7 @@ def handle_callbacks(call):
         bot.answer_callback_query(call.id)
         start(call.message)
 
+# Пассивный веб-сервер для прохождения портов хостинга Render
 if __name__ == "__main__":
     from threading import Thread
     from http.server import HTTPServer, BaseHTTPRequestHandler
