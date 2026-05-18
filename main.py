@@ -148,11 +148,11 @@ def handle_callbacks(call):
         
     elif data == "btn_get_support":
         bot.answer_callback_query(call.id)
-        # ИЗМЕНЕНО: Обновили юзернейм разработчика на @eFpshik
         bot.send_message(chat_id, "По всем вопросам и предложениям пишите разработчику: @eFpshik")
-
+        
     elif data.startswith("join_"):
-        pool_id = data.split("_")
+        # ИСПРАВЛЕНО: берем второй элемент после split
+        pool_id = data.split("_")[1]
         pool = db["pools"].get(pool_id)
         if pool:
             username = call.from_user.username
@@ -164,9 +164,12 @@ def handle_callbacks(call):
                 send_pool_card(chat_id, pool_id)
             else:
                 bot.answer_callback_query(call.id, "Вы уже участвуете в этом сборе.")
-                
+        else:
+            bot.answer_callback_query(call.id, "Сбор не найден!")
+            
     elif data.startswith("paid_"):
-        pool_id = data.split("_")
+        # ИСПРАВЛЕНО: берем второй элемент после split
+        pool_id = data.split("_")[1]
         pool = db["pools"].get(pool_id)
         if pool:
             parts = pool["participants"]
@@ -180,9 +183,12 @@ def handle_callbacks(call):
                 send_pool_card(chat_id, pool_id)
             else:
                 bot.answer_callback_query(call.id, "Сначала нажмите кнопку 'Я в деле!'", show_alert=True)
+        else:
+            bot.answer_callback_query(call.id, "Сбор не найден!")
                 
     elif data.startswith("remind_"):
-        pool_id = data.split("_")
+        # ИСПРАВЛЕНО: берем второй элемент после split
+        pool_id = data.split("_")[1]
         pool = db["pools"].get(pool_id)
         if pool:
             if pool["creator"] == chat_id:
@@ -190,15 +196,22 @@ def handle_callbacks(call):
                 for p_id, p_info in pool["participants"].items():
                     if p_info["status"] != "В расчете!" and int(p_id) != chat_id:
                         try:
-                            bot.send_message(int(p_id), f"🤖 ИИ напоминает: Пора скинуть деньги на сбор №{pool_id}! С вас {round(pool['total']/len(pool['participants']), 2)} руб.")
+                            per_person = round(pool["total"] / len(pool["participants"]), 2)
+                            bot.send_message(int(p_id), f"🤖 ИИ напоминает: Пора скинуть деньги на сбор №{pool_id}! С вас {per_person} руб.")
                         except Exception:
                             pass
             else:
                 bot.answer_callback_query(call.id, "Только создатель сбора может отправлять напоминания!", show_alert=True)
+        else:
+            bot.answer_callback_query(call.id, "Сбор не найден!")
                 
     elif data == "home":
         bot.answer_callback_query(call.id)
-        start(call.message)
+        # Создаем имитацию сообщения для функции start
+        class MockMessage:
+            def __init__(self, chat_id):
+                self.chat = type('obj', (object,), {'id': chat_id})()
+        start(MockMessage(chat_id))
 
 if __name__ == "__main__":
     from threading import Thread
@@ -217,5 +230,9 @@ if __name__ == "__main__":
 
     server_thread = Thread(target=run_server, daemon=True)
     server_thread.start()
-
+    
+    # Убираем вебхук на всякий случай
+    bot.remove_webhook()
+    
+    print("Бот запущен и готов к работе!")
     bot.infinity_polling()
