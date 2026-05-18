@@ -37,7 +37,7 @@ def start(message):
     db["user_states"][str(message.chat.id)] = "MAIN_MENU"
     save_db(db)
     
-    # Кнопки прикрепляются к сообщению (Inline)
+    # Создаем инлайн-кнопки (внутри сообщения)
     markup = types.InlineKeyboardMarkup(row_width=1)
     btn_create = types.InlineKeyboardButton("➕ Создать новый сбор", callback_data="btn_ask_total")
     btn_support = types.InlineKeyboardButton("🧑‍💻 Тех. поддержка", callback_data="btn_get_support")
@@ -50,9 +50,14 @@ def start(message):
         "Выберите действие ниже 👇"
     )
     
-    # Сначала убираем забагованную нижнюю клавиатуру, если она осталась, и шлем меню
+    # Сначала отправляем команду на полное удаление нижней текстовой клавиатуры
     remove_markup = types.ReplyKeyboardRemove()
-    bot.send_message(message.chat.id, "Загружаю меню...", reply_markup=remove_markup)
+    temp_msg = bot.send_message(message.chat.id, "Загрузка...", reply_markup=remove_markup)
+    
+    # Сразу же удаляем временное сообщение, чтобы интерфейс оставался чистым
+    bot.delete_message(message.chat.id, temp_msg.message_id)
+    
+    # Отправляем основное меню с кнопками под текстом
     bot.send_message(message.chat.id, welcome_text, reply_markup=markup)
 
 # Функция запуска сбора
@@ -62,7 +67,7 @@ def start_asking_amount(chat_id):
     save_db(db)
     bot.send_message(chat_id, "Введите общую сумму сбора (например, 1500):")
 
-# НОВЫЙ БЛОК: Отлавливает текст в главном меню, чтобы бот не молчал
+# Отлавливает случайный текст в главном меню, чтобы бот не молчал
 @bot.message_handler(func=lambda message: load_db().get("user_states", {}).get(str(message.chat.id)) == "MAIN_MENU")
 def default_menu_handler(message):
     bot.send_message(
@@ -194,7 +199,6 @@ def handle_callbacks(call):
         bot.answer_callback_query(call.id)
         start(call.message)
 
-# Пассивный веб-сервер для прохождения портов хостинга Render
 if __name__ == "__main__":
     from threading import Thread
     from http.server import HTTPServer, BaseHTTPRequestHandler
