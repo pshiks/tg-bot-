@@ -148,10 +148,11 @@ def handle_callbacks(call):
         
     elif data == "btn_get_support":
         bot.answer_callback_query(call.id)
-        bot.send_message(chat_id, "По всем вопросам и предложениям пишите разработчику: @pshiks")
+        # ИЗМЕНЕНО: Обновили юзернейм разработчика на @eFpshik
+        bot.send_message(chat_id, "По всем вопросам и предложениям пишите разработчику: @eFpshik")
 
     elif data.startswith("join_"):
-        pool_id = data.split("_")[1]
+        pool_id = data.split("_")
         pool = db["pools"].get(pool_id)
         if pool:
             username = call.from_user.username
@@ -165,7 +166,7 @@ def handle_callbacks(call):
                 bot.answer_callback_query(call.id, "Вы уже участвуете в этом сборе.")
                 
     elif data.startswith("paid_"):
-        pool_id = data.split("_")[1]
+        pool_id = data.split("_")
         pool = db["pools"].get(pool_id)
         if pool:
             parts = pool["participants"]
@@ -181,7 +182,7 @@ def handle_callbacks(call):
                 bot.answer_callback_query(call.id, "Сначала нажмите кнопку 'Я в деле!'", show_alert=True)
                 
     elif data.startswith("remind_"):
-        pool_id = data.split("_")[1]
+        pool_id = data.split("_")
         pool = db["pools"].get(pool_id)
         if pool:
             if pool["creator"] == chat_id:
